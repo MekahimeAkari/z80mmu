@@ -136,7 +136,7 @@ write_config_mk()
     echo "LD ?= ${LD}" >> $1
     echo "Z80_LIB ?= ${Z80_LIB}" >> $1
     echo "Z80_INC ?= ${Z80_INC}" >> $1
-    echo "CFLAGS ?= ${CFLAGS}" >> $1
+    echo "CFLAGS ?= -Wall -Wextra ${CFLAGS}" >> $1
     echo "LDFLAGS ?= ${LDFLAGS}" >> $1
     echo "CFLAGS += \$(Z80_INC)" >> $1
     echo "LDFLAGS += \$(Z80_LIB)" >> $1
