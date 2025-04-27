@@ -5,10 +5,15 @@
 SRC = main.c
 OBJ = $(SRC:.c=.o)
 EXE = z80sim
+ASM = test.asm
+BIN = test.bin
 
 include config.mk
 
-all: $(EXE)
+all: $(EXE) $(BIN)
+
+$(BIN): $(ASM)
+	z80asm $(ASM) -o $(BIN)
 
 $(EXE): $(OBJ)
 	$(CC) $(OBJ) $(LDFLAGS) -o $(EXE)
@@ -20,4 +25,4 @@ $(EXE): $(OBJ)
 distclean: clean
 	rm -f config.mk compile_commands.json
 clean:
-	rm -f $(EXE) $(OBJ)
+	rm -f $(EXE) $(OBJ) $(BIN)

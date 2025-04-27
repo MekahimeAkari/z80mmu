@@ -4,8 +4,6 @@
 #include <Z80.h>
 
 #define CYCLES_PER_FRAME 69888
-#define CYCLES_AT_INT    24
-#define CYCLES_PER_INT   32
 #define ROM_SIZE         0x4000 /* 16 KiB */
 #define MEMORY_SIZE      0x8000 /* 32 KiB */
 
@@ -39,7 +37,7 @@ Device *machine_find_device(Machine *self, zuint16 port)
 
 static zuint8 machine_cpu_read(Machine *self, zuint16 address)
 {
-    printf("helo at %u\n", address);
+    printf("helo at 0x%x\n", address);
     return address < MEMORY_SIZE ? self->memory[address] : 0xFF;
 }
 
@@ -66,6 +64,12 @@ static void machine_cpu_out(Machine *self, zuint16 port, zuint8 value)
     if (device != Z_NULL) device->write(device->context, value);
 }
 
+static zbool halted = 0;
+
+static void machine_halt(Machine *self, zuint8 signal)
+{
+    halted = 1;
+}
 
 void machine_init(Machine *self)
 {
@@ -77,7 +81,7 @@ void machine_init(Machine *self)
     self->cpu.write        = (Z80Write)machine_cpu_write;
     self->cpu.in           = (Z80Read )machine_cpu_in;
     self->cpu.out          = (Z80Write)machine_cpu_out;
-    self->cpu.halt         = Z_NULL;
+    self->cpu.halt         = (Z80Halt)machine_halt;
     self->cpu.nmia         = Z_NULL;
     self->cpu.inta         = Z_NULL;
     self->cpu.int_fetch    = Z_NULL;
@@ -95,6 +99,7 @@ void machine_power(Machine *self, zbool state)
 {
     if (state)
     {
+        machine_init(self);
         self->cycles = 0;
         memset(self->memory, 0, 65536);
     }
@@ -111,24 +116,44 @@ void machine_reset(Machine *self)
 
 void machine_run_frame(Machine *self)
 {
-    /* CPU cycles before the INT signal */
-    self->cycles += z80_execute(&self->cpu, CYCLES_AT_INT - self->cycles);
+    zusize cycles = 0;
+    do
+    {
+        cycles += z80_execute(&self->cpu, 1);
+        printf("Cycle: %lu\n", cycles);
+        if (halted == 1)
+            break;
+    }
+    while (cycles < CYCLES_PER_FRAME);
+}
 
-    /* CPU cycles during the INT signal */
-    z80_int(&self->cpu, Z_TRUE);
-    self->cycles += z80_run(&self->cpu, (CYCLES_AT_INT + CYCLES_PER_INT) - self->cycles);
-    z80_int(&self->cpu, Z_FALSE);
-
-    /* CPU cycles after the INT signal */
-    self->cycles += z80_execute(&self->cpu, CYCLES_PER_FRAME - self->cycles);
-
-    self->cycles -= CYCLES_PER_FRAME;
+int load_binary(Machine *self, const char *bin_path)
+{
+    FILE *bin_file = fopen(bin_path, "r");
+    if (bin_file == NULL)
+    {
+        perror("Error opening file");
+        return 1;
+    }
+    char c = fgetc(bin_file);
+    int addr = 0;
+    while (c != EOF && addr < MEMORY_SIZE)
+    {
+        printf("0x%x: 0x%x\n", addr, c);
+        self->memory[addr] = c;
+        addr++;
+        c = fgetc(bin_file);
+    }
+    fclose(bin_file);
+    return 0;
 }
 
 int main()
 {
     printf("henlo\n");
     Machine z80_cpu;
-    machine_init(&z80_cpu);
+    machine_power(&z80_cpu, 1);
+    if(load_binary(&z80_cpu, "test.bin") != 0)
+        return 1;
     machine_run_frame(&z80_cpu);
 }

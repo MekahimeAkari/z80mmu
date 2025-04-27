@@ -52,3 +52,6 @@ Mkfile.old
 dkms.conf
 compile_commands.json
 .cache/*
+test.bin
+z80sim
+config.mk
