@@ -1,0 +1,155 @@
+#!/bin/sh
+
+if [ -z "${PKG_CONFIG}" ]
+then
+    PKG_CONFIG="pkg-config"
+fi
+
+if [ -z "${CONFIG_MK}" ]
+then
+    CONFIG_MK="config.mk"
+fi
+
+
+BAIL=0
+
+usage()
+{
+cat<<EOF
+$0: configure script
+--help | -h: This
+Z80_LIB=<ARGS>: Set library args for linking the Z80 library
+Z80_INC=<ARGS>: Set include args for compiling with the Z80 library
+PKG_CONFIG=<PATH>: Set pkg-config binary (default "${PKG_CONFIG}")
+EOF
+}
+
+grab_argvar()
+{
+    eval $(echo "$1" | cut -d "=" -f 1)="$(echo "$1" | cut -d "=" -f 2-)"
+}
+
+while [ "$#" -gt 0 ]
+do
+    case $1 in
+        Z80_LIB=*|Z80_INC=*|PKG_CONFIG=*|CC=*|LD=*|CFLAGS=*|LDFLAGS=*)
+            grab_argvar "$1"
+            shift
+            ;;
+        --help|-h|-?)
+            usage
+            exit 1
+            ;;
+        *)
+            echo "Unknown argument $1"
+            BAIL=1
+            shift
+            ;;
+    esac
+done
+
+if [ "${BAIL}" -ne 0 ]
+then
+    usage
+    exit 1
+fi
+
+check()
+{
+    printf "Checking for %s..." "$1"
+    eval $2=\$\($3\)
+    FOUND_MSG="$([ -n "$4" ] && echo "$4" || echo "found")"
+    NOTFOUND_MSG="$([ -n "$5" ] && echo "$5" || echo "not found")"
+    if [ -n "$(eval echo \$$2)" ]
+    then
+        echo " ${FOUND_MSG}"
+    else
+        echo " ${NOTFOUND_MSG}"
+    fi
+}
+
+check_cc()
+{
+    if [ -z "${CC}" ]
+    then
+        CC="cc"
+    fi
+    if "${CC}" --help > /dev/null 2>&1
+    then
+        echo "${CC}"
+    else
+        echo ""
+    fi
+}
+
+check_ld()
+{
+    if [ -z "${LD}" ]
+    then
+        LD="ld"
+    fi
+    if command -v "${LD}" > /dev/null 2>&1
+    then
+        echo "${LD}"
+    else
+        echo ""
+    fi
+}
+
+check_pkg_config()
+{
+    if "${PKG_CONFIG}" --help > /dev/null 2>&1
+    then
+        echo "${PKG_CONFIG}"
+    else
+        echo ""
+    fi
+}
+
+check_z80_inc()
+{
+    if [ -n "${PKG_CONFIG}" ]
+    then
+        if [ -z "${Z80_INC}" ]
+        then
+            Z80_INC="$("${PKG_CONFIG}" z80 --cflags)"
+        fi
+    fi
+    echo "${Z80_INC}"
+}
+
+check_z80_lib()
+{
+    if [ -n "${PKG_CONFIG}" ]
+    then
+        if [ -z "${Z80_LIB}" ]
+        then
+            Z80_LIB="$("${PKG_CONFIG}" z80 --libs)"
+        fi
+    fi
+    echo "${Z80_LIB}"
+}
+
+write_config_mk()
+{
+    echo "CC ?= ${CC}" > $1
+    echo "LD ?= ${LD}" >> $1
+    echo "Z80_LIB ?= ${Z80_LIB}" >> $1
+    echo "Z80_INC ?= ${Z80_INC}" >> $1
+    echo "CFLAGS ?= ${CFLAGS}" >> $1
+    echo "LDFLAGS ?= ${LDFLAGS}" >> $1
+    echo "CFLAGS += \$(Z80_INC)" >> $1
+    echo "LDFLAGS += \$(Z80_LIB)" >> $1
+}
+
+check "c compiler" CC check_cc
+check "linker" LD check_ld
+check "pkg-config" PKG_CONFIG check_pkg_config
+check "redcode z80 include flags" Z80_INC check_z80_inc "found" "not found - set Z80_INC manually"
+check "redcode z80 link flags" Z80_LIB check_z80_lib "found" "not found - set Z80_LIB manually"
+if [ -z "${Z80_LIB}" ] || [ -z "${Z80_INC}" ]
+then
+    exit 1
+fi
+write_config_mk "${CONFIG_MK}"
+
